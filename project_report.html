@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Mastitis Project Report — Dataset Construction Pipeline</title>
+    <style>
+      :root{
+        --bg: #0b1020;
+        --bg2:#0f1730;
+        --card:#111a35;
+        --card2:#0f1836;
+        --text:#eaf0ff;
+        --muted:#a9b7e9;
+        --muted2:#93a4da;
+        --line: rgba(255,255,255,.12);
+        --line2: rgba(255,255,255,.08);
+        --accent:#7c5cff;
+        --accent2:#21d4fd;
+        --good:#2ee59d;
+        --warn:#ffcc66;
+        --bad:#ff6b6b;
+        --shadow: 0 16px 48px rgba(0,0,0,.35);
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      }
+
+      @media (prefers-color-scheme: light){
+        :root{
+          --bg:#f6f8ff;
+          --bg2:#eef2ff;
+          --card:#ffffff;
+          --card2:#ffffff;
+          --text:#0e1630;
+          --muted:#4c5a86;
+          --muted2:#5b6aa1;
+          --line: rgba(14,22,48,.14);
+          --line2: rgba(14,22,48,.08);
+          --shadow: 0 18px 50px rgba(14,22,48,.12);
+        }
+      }
+
+      *{ box-sizing:border-box; }
+      html,body{ height:100%; }
+      body{
+        margin:0;
+        font-family: var(--sans);
+        color: var(--text);
+        background:
+          radial-gradient(1200px 900px at 12% 8%, rgba(124,92,255,.35), transparent 55%),
+          radial-gradient(900px 700px at 86% 16%, rgba(33,212,253,.25), transparent 55%),
+          radial-gradient(1100px 800px at 55% 100%, rgba(46,229,157,.14), transparent 60%),
+          linear-gradient(180deg, var(--bg), var(--bg2));
+      }
+
+      a{ color:inherit; text-decoration: none; }
+      a:hover{ text-decoration: underline; text-underline-offset: 4px; }
+
+      .container{
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 18px 56px;
+      }
+
+      .topbar{
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        backdrop-filter: blur(10px);
+        background: color-mix(in oklab, var(--bg), transparent 35%);
+        border-bottom: 1px solid var(--line2);
+      }
+      .topbar-inner{
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 10px 18px;
+        display:flex;
+        gap:14px;
+        align-items:center;
+        justify-content:space-between;
+      }
+
+      .brand{
+        display:flex;
+        align-items:center;
+        gap: 12px;
+        min-width: 220px;
+      }
+      .logo{
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background:
+          radial-gradient(18px 18px at 30% 30%, rgba(255,255,255,.75), transparent 55%),
+          linear-gradient(135deg, var(--accent), var(--accent2));
+        box-shadow: 0 10px 26px rgba(124,92,255,.28);
+        border: 1px solid rgba(255,255,255,.18);
+      }
+      .brand-title{ line-height: 1.1; }
+      .brand-title b{ font-size: 14px; letter-spacing: .2px; display:block; }
+      .brand-title span{ font-size: 12px; color: var(--muted); display:block; }
+
+      .nav{
+        display:flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content:flex-end;
+      }
+      .pill{
+        padding: 8px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, var(--card), transparent 18%);
+        box-shadow: 0 10px 26px rgba(0,0,0,.08);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .pill:hover{ color: var(--text); }
+
+      header.hero{
+        margin-top: 18px;
+        padding: 26px;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--card), transparent 0%), color-mix(in oklab, var(--card2), transparent 12%));
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        overflow:hidden;
+        position: relative;
+      }
+      header.hero:before{
+        content:"";
+        position:absolute;
+        inset:-2px;
+        background:
+          radial-gradient(520px 340px at 16% 8%, rgba(124,92,255,.20), transparent 55%),
+          radial-gradient(560px 360px at 84% 18%, rgba(33,212,253,.16), transparent 55%);
+        pointer-events:none;
+      }
+      .hero-inner{
+        position: relative;
+        display:grid;
+        grid-template-columns: 1.2fr .8fr;
+        gap: 18px;
+        align-items: start;
+      }
+      @media (max-width: 900px){
+        .hero-inner{ grid-template-columns: 1fr; }
+      }
+      h1{
+        margin:0 0 10px;
+        font-size: 28px;
+        letter-spacing: .1px;
+      }
+      .subtitle{
+        margin:0 0 14px;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+      .meta-grid{
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .metric{
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, var(--card2), transparent 10%);
+        border-radius: 14px;
+        padding: 12px 12px;
+      }
+      .metric .k{
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .metric .v{
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: .2px;
+      }
+
+      .callout{
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, var(--card2), transparent 14%);
+        border-radius: 16px;
+        padding: 14px 14px;
+      }
+      .callout h3{ margin:0 0 8px; font-size: 13px; }
+      .callout p{ margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+      .callout ul{ margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+      .callout li{ margin: 6px 0; }
+
+      section{
+        margin-top: 18px;
+        padding: 18px;
+        background: color-mix(in oklab, var(--card), transparent 0%);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 10px 32px rgba(0,0,0,.10);
+      }
+
+      h2{
+        margin: 0 0 10px;
+        font-size: 18px;
+        letter-spacing: .2px;
+      }
+      .hint{
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .grid-2{
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+      @media (max-width: 900px){
+        .grid-2{ grid-template-columns: 1fr; }
+      }
+
+      .box{
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        background: color-mix(in oklab, var(--card2), transparent 10%);
+      }
+      .box h3{ margin:0 0 8px; font-size: 14px; }
+      .box p{ margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+      .box ul{ margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+      .box li{ margin: 6px 0; }
+      .tagrow{ display:flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .tag{
+        display:inline-flex;
+        align-items:center;
+        gap: 8px;
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, var(--card), transparent 14%);
+        color: color-mix(in oklab, var(--text), var(--muted) 20%);
+      }
+      .dot{ width:8px; height:8px; border-radius: 99px; display:inline-block; background: var(--accent2); }
+
+      .code{
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.55;
+        color: color-mix(in oklab, var(--text), white 0%);
+        border-radius: 14px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, #050816, var(--card) 10%);
+        overflow:auto;
+        white-space: pre;
+      }
+
+      .flow{
+        display:grid;
+        gap: 12px;
+        margin-top: 10px;
+      }
+      .step{
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: color-mix(in oklab, var(--card2), transparent 12%);
+        padding: 12px 12px;
+        position: relative;
+      }
+      .step:before{
+        content:"";
+        position:absolute;
+        left: 12px;
+        top: 12px;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--accent), var(--accent2));
+        box-shadow: 0 10px 20px rgba(124,92,255,.25);
+      }
+      .step .title{
+        padding-left: 18px;
+        font-weight: 700;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+      .step .desc{
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      table{
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+      }
+      th, td{
+        padding: 10px 10px;
+        border-bottom: 1px solid var(--line2);
+        vertical-align: top;
+        text-align: left;
+        font-size: 13px;
+      }
+      th{
+        color: color-mix(in oklab, var(--text), var(--muted) 18%);
+        background: color-mix(in oklab, var(--card), transparent 6%);
+        font-weight: 700;
+      }
+      td{
+        color: var(--muted);
+      }
+      tr:last-child td{ border-bottom:none; }
+
+      .note{
+        display:flex;
+        gap: 10px;
+        align-items:flex-start;
+        padding: 12px 12px;
+        border-radius: 16px;
+        border: 1px dashed color-mix(in oklab, var(--line), transparent 0%);
+        background: color-mix(in oklab, var(--card2), transparent 14%);
+        margin-top: 10px;
+      }
+      .note .icon{
+        width: 28px; height: 28px;
+        border-radius: 12px;
+        display:grid; place-items:center;
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, var(--card), transparent 12%);
+        color: var(--warn);
+        font-weight: 800;
+        font-family: var(--mono);
+      }
+      .note .text{
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      footer{
+        margin-top: 18px;
+        padding: 14px 18px;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar" role="navigation" aria-label="Page navigation">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="logo" aria-hidden="true"></div>
+          <div class="brand-title">
+            <b>Mastitis Project Report</b>
+            <span>Dataset construction pipeline (Notebook-driven ETL)</span>
+          </div>
+        </div>
+        <div class="nav">
+          <a class="pill" href="#overview">Overview</a>
+          <a class="pill" href="#inputs">Inputs</a>
+          <a class="pill" href="#pipeline">Pipeline</a>
+          <a class="pill" href="#dataset">Final dataset</a>
+          <a class="pill" href="#run">How to run</a>
+          <a class="pill" href="#notes">Notes</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <header class="hero" id="overview">
+        <div class="hero-inner">
+          <div>
+            <h1>Daily Master Dataset for Mastitis-Related Analysis</h1>
+            <p class="subtitle">
+              This project consolidates dairy data from multiple farm systems (AFI, sensor logs, and event records)
+              into a single <b>daily per-cow dataset</b>. The entire workflow is implemented in
+              <span style="font-family: var(--mono);">Animal_science_dataset_preparation.ipynb</span>.
+            </p>
+
+            <div class="meta-grid" aria-label="Dataset summary metrics">
+              <div class="metric">
+                <div class="k">Final output</div>
+                <div class="v">Mastitis_Dataset_final.csv</div>
+              </div>
+              <div class="metric">
+                <div class="k">Granularity</div>
+                <div class="v">1 row per cow per day</div>
+              </div>
+              <div class="metric">
+                <div class="k">Rows × Columns</div>
+                <div class="v">21,184 × 10</div>
+              </div>
+              <div class="metric">
+                <div class="k">Cows (unique IDs)</div>
+                <div class="v">216</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout">
+            <h3>What makes this project strong?</h3>
+            <p>
+              The pipeline solves a real-world integration problem: the same biological signal (mastitis risk)
+              is reflected across different systems and sampling rates.
+            </p>
+            <ul>
+              <li><b>Time alignment</b>: everything becomes a daily calendar timeline per cow.</li>
+              <li><b>Smart patching</b>: missing yield/conductivity are filled using prioritized sources.</li>
+              <li><b>Behavior + context</b>: rumination/water and management events are attached to each day.</li>
+            </ul>
+          </div>
+        </div>
+      </header>
+
+      <section id="inputs">
+        <h2>Input data sources</h2>
+        <p class="hint">
+          The notebook reads multiple files/folders and converts them into one consistent key:
+          <b>(ID, date)</b>.
+        </p>
+
+        <div class="grid-2">
+          <div class="box">
+            <h3>AFI labeled base data (pathogen context)</h3>
+            <p>
+              Provides cow IDs, dates, and pathogen metadata (<span style="font-family: var(--mono);">bacteria / gram / type</span>),
+              plus partial yield & conductivity.
+            </p>
+            <div class="tagrow">
+              <span class="tag"><span class="dot" style="background: var(--accent)"></span>ID</span>
+              <span class="tag"><span class="dot"></span>date</span>
+              <span class="tag"><span class="dot" style="background: var(--good)"></span>Bacteria / Gram / Type</span>
+              <span class="tag"><span class="dot" style="background: var(--warn)"></span>DailyYield / Avg.Conductivity</span>
+            </div>
+            <div class="note">
+              <div class="icon">!</div>
+              <div class="text">
+                The notebook references AFI Excel files. If they are not present in this repo snapshot, the final
+                outputs still demonstrate the intended pipeline result.
+              </div>
+            </div>
+          </div>
+
+          <div class="box">
+            <h3>AFI “after” daily snapshots</h3>
+            <p>
+              Stored as one CSV per day in <span style="font-family: var(--mono);">AFI data/OneDrive_AFI_after data/</span>.
+              The notebook concatenates them and extracts the date from the filename.
+            </p>
+            <div class="tagrow">
+              <span class="tag"><span class="dot"></span>Cow → ID</span>
+              <span class="tag"><span class="dot" style="background: var(--warn)"></span>Daily → yield</span>
+              <span class="tag"><span class="dot" style="background: var(--warn)"></span>Avg. → conductivity</span>
+              <span class="tag"><span class="dot" style="background: var(--accent2)"></span>date from filename</span>
+            </div>
+          </div>
+
+          <div class="box">
+            <h3>Rumination & water intake sensors</h3>
+            <p>
+              High-frequency logs in <span style="font-family: var(--mono);">rumination and water intake/</span>
+              (many CSV files, typically one per cow ID). The notebook filters to timestamps containing
+              <span style="font-family: var(--mono);">'00:00'</span> and then aggregates daily.
+            </p>
+            <div class="tagrow">
+              <span class="tag"><span class="dot"></span>animal_id → ID</span>
+              <span class="tag"><span class="dot" style="background: var(--good)"></span>rum_index_seconds (mean/day)</span>
+              <span class="tag"><span class="dot" style="background: var(--good)"></span>water_intake_liter (sum/day)</span>
+            </div>
+          </div>
+
+          <div class="box">
+            <h3>Events log (repro/health actions)</h3>
+            <p>
+              Raw file: <span style="font-family: var(--mono);">events_23_24.CSV</span>. The notebook cleans whitespace,
+              removes duplicates, and creates a <b>list of events per cow per day</b>.
+            </p>
+            <div class="tagrow">
+              <span class="tag"><span class="dot" style="background: var(--accent2)"></span>Event → list</span>
+              <span class="tag"><span class="dot" style="background: var(--warn)"></span>parse Date</span>
+              <span class="tag"><span class="dot" style="background: var(--good)"></span>deduplicate</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pipeline">
+        <h2>Pipeline (end-to-end execution)</h2>
+        <p class="hint">
+          The notebook converts all sources into a consistent daily timeline and merges them using the key
+          <b>(ID, date)</b>.
+        </p>
+
+        <div class="flow" aria-label="Pipeline steps">
+          <div class="step">
+            <div class="title">Step 1 — Load AFI base dataset</div>
+            <div class="desc">
+              Read AFI labeled data and keep only the columns needed for joining and labeling:
+              ID, date, DailyYield, Avg.Conductivity, Bacteria, Gram, Type.
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="title">Step 2 — Build the daily “skeleton” timeline</div>
+            <div class="desc">
+              For each cow: create a continuous daily range from (min date − 30 days) to (max date + 30 days),
+              then merge the original rows onto this template and fill pathogen metadata.
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="title">Step 3 — Patch milk yield & conductivity (priority fill)</div>
+            <div class="desc">
+              Join “before” and “after” milk datasets, convert fields to numeric, and fill missing values using priority:
+              AFI base → before export → after snapshots.
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="title">Step 4 — Aggregate rumination and water intake to daily</div>
+            <div class="desc">
+              Concatenate per-cow sensor logs, extract the date from timestamps, then compute mean rumination and
+              total daily water intake per cow/day.
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="title">Step 5 — Clean events and attach per-day event lists</div>
+            <div class="desc">
+              Parse the event dates, group by cow/day, strip whitespace, deduplicate and sort event strings,
+              then store them as a list.
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="title">Step 6 — Export final dataset</div>
+            <div class="desc">
+              Save the merged master table to <span style="font-family: var(--mono);">Mastitis_Dataset_final.csv</span>.
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 14px;">
+          <div class="box">
+            <h3>Yield / conductivity patch logic (as implemented)</h3>
+            <p>
+              The notebook coerces all candidate columns to numeric and then fills missing values in a strict priority order.
+            </p>
+            <div class="code" role="region" aria-label="Patching logic snippet">
+final_merge["DailyYield"] = (
+  final_merge["DailyYield"]
+    .fillna(final_merge["yield_post"])
+    .fillna(final_merge["yield_after"])
+)
+
+final_merge["Avg.Conductivity"] = (
+  final_merge["Avg.Conductivity"]
+    .fillna(final_merge["cond_post"])
+    .fillna(final_merge["cond_after"])
+)
+            </div>
+          </div>
+
+          <div class="box">
+            <h3>Daily aggregation logic (rumination + water)</h3>
+            <p>
+              After converting timestamps to dates, the notebook aggregates the sensor stream into a daily table.
+            </p>
+            <div class="code" role="region" aria-label="Daily aggregation snippet">
+rum_water_daily = rum_water_prep.groupby(["ID", "date"]).agg({
+  "rum_index_seconds": "mean",
+  "water_intake_liter": "sum"
+}).reset_index()
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="dataset">
+        <h2>Final dataset schema & quick facts</h2>
+        <p class="hint">
+          This section is meant to be professor-friendly: it explains what each column means and what values to expect.
+        </p>
+
+        <table aria-label="Final dataset schema table">
+          <thead>
+            <tr>
+              <th style="width: 18%;">Column</th>
+              <th style="width: 22%;">Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="font-family: var(--mono);">ID</span></td>
+              <td>integer (cow identifier)</td>
+              <td>Unique cow ID used across all joins.</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">date</span></td>
+              <td>date</td>
+              <td>Daily calendar date for the observation.</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">yield</span></td>
+              <td>numeric</td>
+              <td>Daily milk yield (patched from multiple sources).</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">conductivity</span></td>
+              <td>numeric</td>
+              <td>Daily average milk conductivity (patched from multiple sources).</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">bacteria</span></td>
+              <td>string (label)</td>
+              <td>Pathogen label associated with the cow cohort (e.g., Staph, SA, MBG, Enterococc).</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">gram</span></td>
+              <td>string (label)</td>
+              <td>Gram classification (often P/N depending on label source).</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">type</span></td>
+              <td>string (category)</td>
+              <td>Category field from AFI base dataset.</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">rum_index_seconds</span></td>
+              <td>numeric</td>
+              <td>Daily rumination index aggregated per cow/day (mean).</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">water_intake_liter</span></td>
+              <td>numeric</td>
+              <td>Total daily water intake (liters) aggregated per cow/day (sum).</td>
+            </tr>
+            <tr>
+              <td><span style="font-family: var(--mono);">Event</span></td>
+              <td>list (string list)</td>
+              <td>Cleaned list of events for that cow/day (deduplicated and sorted).</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="grid-2" style="margin-top: 14px;">
+          <div class="box">
+            <h3>Computed dataset facts (from repo files)</h3>
+            <ul>
+              <li><b>Rows × columns</b>: 21,184 × 10</li>
+              <li><b>Unique cows</b>: 216</li>
+              <li><b>Date range</b>: 2023-11-07 → 2024-03-30</li>
+              <li><b>Missingness (final)</b>: yield ~7.4%, conductivity ~6.8%, rumination ~2.2%, water intake ~2.0%</li>
+            </ul>
+          </div>
+          <div class="box">
+            <h3>Intermediate dataset</h3>
+            <p>
+              The repository also includes <span style="font-family: var(--mono);">final_dataset.csv</span>
+              (8,152 rows) with the same 10-column schema but a shorter date range.
+            </p>
+            <div class="note">
+              <div class="icon">i</div>
+              <div class="text">
+                This is useful for debugging joins and confirming daily aggregation and event cleaning
+                before exporting the full dataset.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="run">
+        <h2>How to run (reproducible instructions)</h2>
+        <p class="hint">
+          Recommended method: run the notebook top-to-bottom to reproduce the export.
+        </p>
+        <div class="grid-2">
+          <div class="box">
+            <h3>Environment setup (Windows / PowerShell)</h3>
+            <div class="code" role="region" aria-label="PowerShell setup commands">
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install pandas numpy jupyter
+jupyter lab
+            </div>
+          </div>
+          <div class="box">
+            <h3>Reproduce the export</h3>
+            <ul>
+              <li>Open <span style="font-family: var(--mono);">Animal_science_dataset_preparation.ipynb</span></li>
+              <li>Run all cells</li>
+              <li>Verify the final cell writes <span style="font-family: var(--mono);">Mastitis_Dataset_final.csv</span></li>
+            </ul>
+            <div class="note">
+              <div class="icon">!</div>
+              <div class="text">
+                If your environment does not have the referenced Excel “before/base” files, you can still
+                demonstrate the pipeline using the repo’s final CSV outputs and by providing equivalent inputs
+                with the same schema.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="notes">
+        <h2>Notes & best practices (what to mention during evaluation)</h2>
+        <p class="hint">
+          These points show you understand real-world data constraints and the trade-offs made in the notebook.
+        </p>
+        <div class="grid-2">
+          <div class="box">
+            <h3>Why the 30-day expansion matters</h3>
+            <p>
+              Building a complete daily timeline per cow makes it possible to compute “days relative to event”
+              features (before/after mastitis, lab results, breeding events) and ensures merges do not silently drop days.
+            </p>
+          </div>
+          <div class="box">
+            <h3>Rumination downsampling trade-off</h3>
+            <p>
+              Filtering timestamps containing <span style="font-family: var(--mono);">'00:00'</span> is a fast way to reduce data size,
+              but it assumes midnight rows are representative or already aggregated. For a strict daily aggregation,
+              you could aggregate all timepoints per day instead.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        Generated for submission: <b>README.md</b> + <b>project_report.html</b> (stored in the repository root).
+      </footer>
+    </div>
+  </body>
+</html>
+
